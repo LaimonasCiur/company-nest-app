@@ -6,10 +6,8 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable validation
   app.useGlobalPipes(new ValidationPipe());
 
-  // Setup Swagger
   const config = new DocumentBuilder()
     .setTitle('Dynamic Data Query API')
     .setDescription('API for querying company data points from different tables')

@@ -15,27 +15,38 @@ import { CompanyInfo } from './entities/company-info.entity';
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mssql',
-        host: configService.get('DB_HOST', 'localhost'),
-        port: configService.get('DB_PORT', 1433),
-        username: configService.get('DB_USERNAME'),
-        password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_DATABASE'),
-        entities: [FinancialData, MarketData, CompanyInfo],
-        synchronize: configService.get('NODE_ENV') !== 'production', // Set to false in production
-        logging: configService.get('NODE_ENV') === 'development',
-        options: {
-          encrypt: configService.get('DB_ENCRYPT', 'true') === 'true', // Required for Azure SQL
-          trustServerCertificate: configService.get('DB_TRUST_SERVER_CERTIFICATE', 'false') === 'true', // For local dev
-          enableArithAbort: true,
-          connectionTimeout: 30000,
-          requestTimeout: 30000,
-        },
-        extra: {
-          validateParameters: false,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+
+        const username = configService.get('DB_USERNAME');
+        const password = configService.get('DB_PASSWORD');
+        const database = configService.get('DB_DATABASE');
+
+        if (!username || !password || !database) {
+          throw new Error('Missing required database configuration: DB_USERNAME, DB_PASSWORD, or DB_DATABASE');
+        }
+
+        return {
+          type: 'mssql',
+          host: configService.get('DB_HOST'),
+          port: parseInt(configService.get('DB_PORT', '1433'), 10),
+          username: username,
+          password: password,
+          database: database,
+          entities: [FinancialData, MarketData, CompanyInfo],
+          synchronize: configService.get('NODE_ENV') !== 'production',
+          logging: configService.get('NODE_ENV') === 'development',
+          options: {
+            encrypt: configService.get('DB_ENCRYPT', 'false') === 'true',
+            trustServerCertificate: configService.get('DB_TRUST_SERVER_CERTIFICATE', 'true') === 'true',
+            enableArithAbort: true,
+            connectionTimeout: parseInt(configService.get('DB_CONNECTION_TIMEOUT', '30000'), 10),
+            requestTimeout: parseInt(configService.get('DB_REQUEST_TIMEOUT', '30000'), 10),
+          },
+          extra: {
+            validateParameters: false,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([FinancialData, MarketData, CompanyInfo]),
