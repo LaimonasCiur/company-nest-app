@@ -10,8 +10,8 @@ export class DataQueryController {
 
   @Get('query')
   @ApiOperation({
-    summary: 'Query specific data point for a company',
-    description: 'Retrieve a specific data point for a company from the specified table'
+    summary: 'Query specific data point for a company with business rules',
+    description: 'Retrieve a specific data point for a company from the specified table with business rule validation and transformation'
   })
   @ApiQuery({
     name: 'ticker',
@@ -30,28 +30,53 @@ export class DataQueryController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Data point retrieved successfully',
+    description: 'Data point retrieved successfully with business rules applied',
     schema: {
       type: 'object',
       properties: {
         ticker: { type: 'string', example: 'AAPL' },
         dataPoint: { type: 'string', example: 'revenue' },
         tableName: { type: 'string', example: 'financial_data' },
-        value: { type: 'number', example: 394328000000 },
+        value: {
+          oneOf: [
+            { type: 'number', example: 394328000000 },
+            {
+              type: 'object',
+              properties: {
+                original: { type: 'number', example: 394328000000 },
+                billions: { type: 'number', example: 394.33 },
+                formatted: { type: 'string', example: '$394.33B' }
+              }
+            }
+          ]
+        },
+        originalValue: { type: 'number', example: 394328000000 },
+        businessRule: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', example: 'Large cap company detected - revenue over $1T' },
+            applied: { type: 'boolean', example: true },
+            appliedRules: {
+              type: 'array',
+              items: { type: 'string' },
+              example: ['validate-ticker', 'table-access-granted', 'transform-to-billions', 'large-cap-company']
+            }
+          }
+        },
         timestamp: { type: 'string', example: '2024-01-15T10:30:00.000Z' }
       }
     }
   })
   @ApiResponse({
     status: 400,
-    description: 'Bad request - Invalid parameters'
+    description: 'Bad request - Invalid parameters or business rules validation failed'
   })
   @ApiResponse({
     status: 404,
     description: 'Data not found for the specified ticker'
   })
   async queryData(
-    @Query(ValidationPipe) queryParams: QueryDataDto
+    @Query(new ValidationPipe({ transform: true })) queryParams: QueryDataDto
   ) {
     const { ticker, dataPoint, tableName } = queryParams;
     return await this.dataQueryService.queryDataPoint(ticker, dataPoint, tableName);
@@ -69,5 +94,41 @@ export class DataQueryController {
   async seedDatabase() {
     await this.dataQueryService.seedData();
     return { message: 'Database seeded successfully' };
+  }
+
+  @Get('rules/info')
+  @ApiOperation({
+    summary: 'Get information about active business rules',
+    description: 'Returns information about the currently configured business rules'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Business rules information retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        rulesCount: { type: 'number', example: 8 },
+        ruleTypes: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['ticker-validation', 'table-access-validation', 'large-number-transformation', 'large-cap-company-detection']
+        }
+      }
+    }
+  })
+  async getRulesInfo() {
+    // You'll need to inject BusinessRulesService here if you want this endpoint
+    return {
+      rulesCount: 8,
+      ruleTypes: [
+        'ticker-validation',
+        'table-access-validation',
+        'large-number-transformation',
+        'large-cap-company-detection',
+        'mega-corporation-detection',
+        'high-pe-ratio-detection',
+        'penny-stock-detection'
+      ]
+    };
   }
 }

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DataQueryController } from './controllers/data-query.controller';
 import { DataQueryService } from './services/data-query.service';
+import { BusinessRulesService } from './services/business-rule.service';
 import { FinancialData } from './entities/financial-data.entity';
 import { MarketData } from './entities/market-data.entity';
 import { CompanyInfo } from './entities/company-info.entity';
@@ -52,6 +53,6 @@ import { CompanyInfo } from './entities/company-info.entity';
     TypeOrmModule.forFeature([FinancialData, MarketData, CompanyInfo]),
   ],
   controllers: [DataQueryController],
-  providers: [DataQueryService],
+  providers: [DataQueryService, BusinessRulesService],
 })
 export class AppModule {}

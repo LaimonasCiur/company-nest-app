@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { FinancialData } from '../entities/financial-data.entity';
 import { MarketData } from '../entities/market-data.entity';
 import { CompanyInfo } from '../entities/company-info.entity';
+import { BusinessRulesService } from './business-rule.service';
+import { RuleContext } from '../interfaces/business-rule-context';
 
 @Injectable()
 export class DataQueryService {
@@ -14,26 +16,30 @@ export class DataQueryService {
     private marketDataRepository: Repository<MarketData>,
     @InjectRepository(CompanyInfo)
     private companyInfoRepository: Repository<CompanyInfo>,
+    private businessRulesService: BusinessRulesService,
   ) {}
 
   async queryDataPoint(ticker: string, dataPoint: string, tableName: string): Promise<any> {
-    // Validate table name
-    const validTables = ['financial_data', 'market_data', 'company_info'];
-    if (!validTables.includes(tableName)) {
-      throw new BadRequestException(`Invalid table name. Must be one of: ${validTables.join(', ')}`);
+    const ruleContext: RuleContext = {
+      ticker: ticker.toUpperCase(),
+      dataPoint,
+      tableName
+    };
+
+    const ruleResult = await this.businessRulesService.executeRules(ruleContext);
+
+    if (!ruleResult.isValid) {
+      throw new BadRequestException(ruleResult.message || 'Business rules validation failed');
     }
 
-    // Get the appropriate repository and valid columns
     const { repository, validColumns } = this.getRepositoryAndColumns(tableName);
 
-    // Validate data point (column name)
     if (!validColumns.includes(dataPoint)) {
       throw new BadRequestException(
         `Invalid data point '${dataPoint}' for table '${tableName}'. Valid columns: ${validColumns.join(', ')}`
       );
     }
 
-    // Query the data
     const queryBuilder = repository.createQueryBuilder('entity');
     queryBuilder
       .select([`entity.${dataPoint}`, 'entity.ticker'])
@@ -45,11 +51,26 @@ export class DataQueryService {
       throw new NotFoundException(`No data found for ticker '${ticker}' in table '${tableName}'`);
     }
 
+    const rawValue = result[dataPoint];
+
+    const ruleContextWithValue: RuleContext = {
+      ...ruleContext,
+      value: rawValue
+    };
+
+    const finalRuleResult = await this.businessRulesService.executeRules(ruleContextWithValue);
+
     return {
       ticker: result.ticker,
       dataPoint,
       tableName,
-      value: result[dataPoint],
+      value: finalRuleResult.transformedValue !== undefined ? finalRuleResult.transformedValue : rawValue,
+      originalValue: rawValue,
+      businessRule: {
+        message: finalRuleResult.message,
+        applied: finalRuleResult.transformedValue !== undefined,
+        appliedRules: finalRuleResult.appliedRules || []
+      },
       timestamp: new Date().toISOString()
     };
   }
@@ -78,7 +99,6 @@ export class DataQueryService {
 
   // Seed data method for testing
   async seedData(): Promise<void> {
-    // Seed financial data
     const financialData = [
       { ticker: 'AAPL', revenue: 394328000000, profit: 99803000000, assets: 352755000000, liabilities: 302083000000, employees: 164000 },
       { ticker: 'GOOGL', revenue: 307394000000, profit: 73795000000, assets: 402392000000, liabilities: 120005000000, employees: 190234 },
@@ -92,7 +112,6 @@ export class DataQueryService {
       }
     }
 
-    // Seed market data
     const marketData = [
       { ticker: 'AAPL', stock_price: 189.87, market_cap: 2950000000000, pe_ratio: 29.55, dividend_yield: 0.44, volume: 45680000 },
       { ticker: 'GOOGL', stock_price: 138.21, market_cap: 1750000000000, pe_ratio: 23.71, dividend_yield: 0.00, volume: 28450000 },
@@ -106,7 +125,6 @@ export class DataQueryService {
       }
     }
 
-    // Seed company info
     const companyInfo = [
       { ticker: 'AAPL', company_name: 'Apple Inc.', sector: 'Technology', industry: 'Consumer Electronics', headquarters: 'Cupertino, CA', founded_date: new Date('1976-04-01') },
       { ticker: 'GOOGL', company_name: 'Alphabet Inc.', sector: 'Technology', industry: 'Internet Services', headquarters: 'Mountain View, CA', founded_date: new Date('1998-09-04') },
