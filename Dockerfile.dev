@@ -1,0 +1,30 @@
+# Dockerfile.dev
+FROM node:20-alpine
+
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
+# Set working directory
+WORKDIR /usr/src/app
+
+# Copy package files
+COPY package*.json ./
+
+# Install ALL dependencies (including dev dependencies)
+RUN npm install
+
+# Ensure Nest CLI is available globally AND locally
+RUN npm install -g @nestjs/cli
+RUN npx nest --version || echo "Nest CLI check failed"
+
+# Copy source code
+COPY . .
+
+# Make sure node_modules/.bin is in PATH
+ENV PATH="/usr/src/app/node_modules/.bin:$PATH"
+
+# Expose port
+EXPOSE 3000
+
+# Start the application in development mode
+CMD ["npm", "run", "start:dev"]

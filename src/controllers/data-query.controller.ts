@@ -82,20 +82,6 @@ export class DataQueryController {
     return await this.dataQueryService.queryDataPoint(ticker, dataPoint, tableName);
   }
 
-  @Post('seed')
-  @ApiOperation({
-    summary: 'Seed database with sample data',
-    description: 'Populate the database with sample financial, market, and company data for testing'
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'Database seeded successfully'
-  })
-  async seedDatabase() {
-    await this.dataQueryService.seedData();
-    return { message: 'Database seeded successfully' };
-  }
-
   @Get('rules/info')
   @ApiOperation({
     summary: 'Get information about active business rules',
@@ -117,7 +103,6 @@ export class DataQueryController {
     }
   })
   async getRulesInfo() {
-    // You'll need to inject BusinessRulesService here if you want this endpoint
     return {
       rulesCount: 8,
       ruleTypes: [

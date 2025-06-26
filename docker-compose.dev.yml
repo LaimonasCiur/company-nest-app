@@ -1,0 +1,23 @@
+# docker-compose.dev.yml
+version: '3.8'
+
+services:
+  nestjs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev  # Use the dev Dockerfile
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      NODE_ENV: development
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USERNAME: sa
+      DB_PASSWORD: YourStrong@Passw0rd
+      DB_DATABASE: CompanyDB
+      DB_SYNCHRONIZE: true
+      DB_LOGGING: true
+    # Remove the custom command, let Dockerfile.dev handle it
+    stdin_open: true
+    tty: true

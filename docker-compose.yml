@@ -1,0 +1,52 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: company-sqlserver
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_SA_PASSWORD: YourStrong@Passw0rd
+      MSSQL_PID: Developer
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - company-network
+    restart: unless-stopped
+
+  # NestJS Application
+  nestjs-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: company-nestjs-app
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USERNAME: sa
+      DB_PASSWORD: YourStrong@Passw0rd
+      DB_DATABASE: CompanyDB
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    networks:
+      - company-network
+    depends_on:
+      - sqlserver
+    restart: unless-stopped
+    command: sh -c "npx ts-node -r tsconfig-paths/register src/main.ts"
+
+volumes:
+  sqlserver_data:
+    driver: local
+
+networks:
+  company-network:
+    driver: bridge
