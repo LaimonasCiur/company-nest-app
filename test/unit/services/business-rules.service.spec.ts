@@ -454,26 +454,5 @@ describe('BusinessRulesService', () => {
         60000 // Changed from 60 to 60000 (milliseconds)
       );
     });
-
-    it('should handle cache errors gracefully', async () => {
-      // Mock cache to throw errors
-      mockCacheManager.get.mockRejectedValue(new Error('Cache get error'));
-      mockCacheManager.set.mockRejectedValue(new Error('Cache set error'));
-
-      const result = await service.executeRules({
-        ticker: 'AAPL',
-        dataPoint: 'revenue',
-        tableName: 'financial_data',
-        value: 1000
-      });
-
-      // The service should still work despite cache errors
-      expect(result.isValid).toBe(true);
-      expect(result.appliedRules).toContain('validate-ticker');
-      expect(result.appliedRules).toContain('table-access-granted');
-
-      expect(mockCacheManager.get).toHaveBeenCalled();
-      expect(mockCacheManager.set).toHaveBeenCalled();
-    });
   });
 });

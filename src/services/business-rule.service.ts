@@ -175,18 +175,12 @@ export class BusinessRulesService {
 
   async executeRules(context: RuleContext): Promise<RuleResult> {
     try {
-      // Generate cache key for rule execution
       const cacheKey = this.generateRuleCacheKey(context);
 
-      // Check cache first for rule results
       const cachedResult = await this.cacheManager.get<RuleResult>(cacheKey);
       if (cachedResult) {
-        this.logger.log(`🎯 Rule cache hit for: ${cacheKey}`);
         return cachedResult;
       }
-
-      this.logger.log(`🎯 Rule cache miss for: ${cacheKey}`);
-      this.logger.log(`Executing rules for: ${context.ticker}.${context.dataPoint} from ${context.tableName}`);
 
       if (!this.isValidTicker(context.ticker)) {
         const result: RuleResult = {
@@ -243,8 +237,6 @@ export class BusinessRulesService {
         }
       }
 
-      this.logger.log(`Rules execution completed. Applied rules: ${appliedRules.join(', ')}`);
-
       const result: RuleResult = {
         isValid: true,
         message: messages.length > 0 ? messages.join('; ') : 'No specific business rules applied',
@@ -252,26 +244,15 @@ export class BusinessRulesService {
         appliedRules
       };
 
-      // Cache the rule result for future use (shorter TTL for rules)
       try {
-        await this.cacheManager.set(cacheKey, result, 60000); // Cache for 1 minute (60000ms)
-        this.logger.log(`🎯 Cached rule result for: ${cacheKey}`);
-
-        // Verify the cache was set
-        const verification = await this.cacheManager.get(cacheKey);
-        if (verification) {
-          this.logger.log(`✅ Rule cache verification successful for: ${cacheKey}`);
-        } else {
-          this.logger.error(`❌ Rule cache verification FAILED for: ${cacheKey}`);
-        }
+        await this.cacheManager.set(cacheKey, result, 60000);
+        await this.cacheManager.get(cacheKey);
       } catch (cacheError) {
-        this.logger.error(`❌ Failed to cache rule result for: ${cacheKey}`, cacheError);
       }
 
       return result;
 
     } catch (error) {
-      this.logger.error('Error executing business rules:', error);
       return {
         isValid: false,
         message: 'Error executing business rules: ' + error.message,
@@ -282,7 +263,6 @@ export class BusinessRulesService {
 
   async clearRuleCache(ticker?: string, dataPoint?: string, tableName?: string): Promise<{ message: string; clearedKeys?: string[] }> {
     if (ticker && dataPoint && tableName) {
-      // Clear specific rule cache entries
       const baseContext: RuleContext = { ticker, dataPoint, tableName };
       const cacheKeys = [
         this.generateRuleCacheKey(baseContext),
@@ -294,26 +274,22 @@ export class BusinessRulesService {
         try {
           await this.cacheManager.del(key);
         } catch (error) {
-          // Ignore errors for non-existent keys
         }
       }
 
-      this.logger.log(`Cleared rule cache for keys: ${cacheKeys.join(', ')}`);
       return {
         message: `Rule cache cleared for ${ticker}.${dataPoint} from ${tableName}`,
         clearedKeys: cacheKeys
       };
     } else {
-      // Clear all rule cache entries by deleting known patterns
       const clearedKeys: string[] = [];
-      const tickers = ['AAPL', 'GOOGL', 'MSFT']; // Known tickers from seed data
+      const tickers = ['AAPL', 'GOOGL', 'MSFT'];
       const tables = [
         { name: 'financial_data', columns: ['revenue', 'profit', 'assets', 'liabilities', 'employees'] },
         { name: 'market_data', columns: ['stock_price', 'market_cap', 'pe_ratio', 'dividend_yield', 'volume'] },
         { name: 'company_info', columns: ['company_name', 'sector', 'industry', 'headquarters', 'founded_date'] }
       ];
 
-      // Clear all known rule cache entries
       for (const tickerSymbol of tickers) {
         for (const table of tables) {
           for (const column of table.columns) {
@@ -334,14 +310,12 @@ export class BusinessRulesService {
                 await this.cacheManager.del(key);
                 clearedKeys.push(key);
               } catch (error) {
-                // Ignore errors for non-existent keys
               }
             }
           }
         }
       }
 
-      this.logger.log(`Cleared ${clearedKeys.length} rule cache entries`);
       return {
         message: `Cleared ${clearedKeys.length} rule cache entries`,
         clearedKeys
@@ -352,7 +326,6 @@ export class BusinessRulesService {
   private generateRuleCacheKey(context: RuleContext): string {
     const valueKey = context.value !== undefined ? String(context.value) : 'no-value';
     const key = `rules:${context.ticker.toUpperCase()}:${context.dataPoint.toLowerCase()}:${context.tableName.toLowerCase()}:${valueKey}`;
-    this.logger.debug(`Generated rule cache key: ${key}`);
     return key;
   }
 

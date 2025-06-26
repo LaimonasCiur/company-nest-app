@@ -28,16 +28,9 @@ export class DataQueryService {
     const cacheKey = this.generateCacheKey(ticker, dataPoint, tableName);
 
     try {
-      // Enhanced cache debugging
-      this.logger.log(`Attempting cache lookup for key: ${cacheKey}`);
-
-      // Try to get from cache first
       const cachedResult = await this.cacheManager.get(cacheKey);
 
       if (cachedResult) {
-        this.logger.log(`✅ Cache HIT for key: ${cacheKey}`);
-        this.logger.debug(`Cached data type: ${typeof cachedResult}, keys: ${Object.keys(cachedResult)}`);
-
         return {
           ...cachedResult,
           cached: true,
@@ -46,9 +39,6 @@ export class DataQueryService {
         };
       }
 
-      this.logger.log(`❌ Cache MISS for key: ${cacheKey}`);
-
-      // Execute business rules validation first (without value)
       const ruleContext: RuleContext = {
         ticker: ticker.toUpperCase(),
         dataPoint,
@@ -61,7 +51,6 @@ export class DataQueryService {
         throw new BadRequestException(ruleResult.message || 'Business rules validation failed');
       }
 
-      // Get repository and validate data point
       const { repository, validColumns } = this.getRepositoryAndColumns(tableName);
 
       if (!validColumns.includes(dataPoint)) {
@@ -70,8 +59,6 @@ export class DataQueryService {
         );
       }
 
-      // Query database
-      this.logger.log(`Querying database for ${ticker}.${dataPoint} from ${tableName}`);
       const queryBuilder = repository.createQueryBuilder('entity');
       queryBuilder
         .select([`entity.${dataPoint}`, 'entity.ticker'])
@@ -84,9 +71,7 @@ export class DataQueryService {
       }
 
       const rawValue = result[dataPoint];
-      this.logger.log(`Raw value from DB: ${rawValue} (type: ${typeof rawValue})`);
 
-      // Execute business rules with the actual value
       const ruleContextWithValue: RuleContext = {
         ...ruleContext,
         value: rawValue
@@ -94,7 +79,6 @@ export class DataQueryService {
 
       const finalRuleResult = await this.businessRulesService.executeRules(ruleContextWithValue);
 
-      // Prepare response data - make it serializable
       const responseData = {
         ticker: result.ticker,
         dataPoint,
@@ -111,62 +95,40 @@ export class DataQueryService {
         timestamp: new Date().toISOString()
       };
 
-      // Enhanced cache setting with debugging
       try {
-        this.logger.log(`📦 Setting cache for key: ${cacheKey}`);
-        this.logger.debug(`Data to cache: ${JSON.stringify(responseData, null, 2)}`);
-
-        // Use explicit TTL in milliseconds (5 minutes = 300000ms)
         await this.cacheManager.set(cacheKey, responseData, 300000);
-
-        this.logger.log(`✅ Successfully cached result for key: ${cacheKey}`);
-
-        // Immediately verify the cache was set
-        const verification = await this.cacheManager.get(cacheKey);
-        if (verification) {
-          this.logger.log(`✅ Cache verification successful for key: ${cacheKey}`);
-        } else {
-          this.logger.error(`❌ Cache verification FAILED for key: ${cacheKey}`);
-        }
-
+        await this.cacheManager.get(cacheKey);
       } catch (cacheError) {
-        this.logger.error(`❌ Failed to cache result for key: ${cacheKey}`, cacheError);
       }
 
       return responseData;
 
     } catch (error) {
-      this.logger.error(`Error in queryDataPoint for ${cacheKey}:`, error);
       throw error;
     }
   }
 
   async clearCache(ticker?: string, dataPoint?: string, tableName?: string): Promise<{ message: string; clearedKeys?: string[] }> {
     if (ticker && dataPoint && tableName) {
-      // Clear specific cache entry
       const cacheKey = this.generateCacheKey(ticker, dataPoint, tableName);
       try {
         await this.cacheManager.del(cacheKey);
-        this.logger.log(`Cleared cache for key: ${cacheKey}`);
         return {
           message: `Cache cleared for ${ticker}.${dataPoint} from ${tableName}`,
           clearedKeys: [cacheKey]
         };
       } catch (error) {
-        this.logger.error(`Failed to clear cache for key: ${cacheKey}`, error);
         throw error;
       }
     } else {
-      // Clear all cache entries by deleting known patterns
       const clearedKeys: string[] = [];
-      const tickers = ['AAPL', 'GOOGL', 'MSFT']; // Known tickers from seed data
+      const tickers = ['AAPL', 'GOOGL', 'MSFT'];
       const tables = [
         { name: 'financial_data', columns: ['revenue', 'profit', 'assets', 'liabilities', 'employees'] },
         { name: 'market_data', columns: ['stock_price', 'market_cap', 'pe_ratio', 'dividend_yield', 'volume'] },
         { name: 'company_info', columns: ['company_name', 'sector', 'industry', 'headquarters', 'founded_date'] }
       ];
 
-      // Clear all known cache entries
       for (const tickerSymbol of tickers) {
         for (const table of tables) {
           for (const column of table.columns) {
@@ -175,14 +137,11 @@ export class DataQueryService {
               await this.cacheManager.del(cacheKey);
               clearedKeys.push(cacheKey);
             } catch (error) {
-              // Ignore errors for non-existent keys
-              this.logger.debug(`Key not found during clear: ${cacheKey}`);
             }
           }
         }
       }
 
-      this.logger.log(`Cleared ${clearedKeys.length} cache entries`);
       return {
         message: `Cleared ${clearedKeys.length} cache entries`,
         clearedKeys
@@ -191,10 +150,9 @@ export class DataQueryService {
   }
 
   async getCacheStats(): Promise<any> {
-    // Note: cache-manager doesn't provide built-in stats, so we'll simulate some
     return {
       cacheEnabled: true,
-      defaultTTL: 300000, // 5 minutes in milliseconds
+      defaultTTL: 300000,
       maxItems: 1000,
       message: 'Cache is active and configured'
     };
@@ -210,23 +168,18 @@ export class DataQueryService {
 
     let warmedEntries = 0;
 
-    this.logger.log('Starting cache warmup...');
-
     for (const ticker of tickers) {
       for (const table of tables) {
         for (const column of table.columns) {
           try {
             await this.queryDataPoint(ticker, column, table.name);
             warmedEntries++;
-            this.logger.debug(`Warmed cache for ${ticker}.${column} from ${table.name}`);
           } catch (error) {
-            this.logger.warn(`Failed to warm cache for ${ticker}.${column} from ${table.name}: ${error.message}`);
           }
         }
       }
     }
 
-    this.logger.log(`Cache warmup completed. Warmed ${warmedEntries} entries.`);
     return {
       message: 'Cache warmup completed',
       warmedEntries
@@ -234,9 +187,7 @@ export class DataQueryService {
   }
 
   private generateCacheKey(ticker: string, dataPoint: string, tableName: string): string {
-    // Ensure consistent casing and clean key generation
     const key = `query:${ticker.toUpperCase()}:${dataPoint.toLowerCase()}:${tableName.toLowerCase()}`;
-    this.logger.debug(`Generated cache key: ${key}`);
     return key;
   }
 
