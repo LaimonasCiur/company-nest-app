@@ -29,6 +29,11 @@
 
 ```bash
 $ npm install
+
+Or
+
+to run on docker: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
 ```
 
 ## Compile and run the project
