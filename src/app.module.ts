@@ -1,6 +1,7 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { CacheModule } from '@nestjs/cache-manager';
 import { DataQueryController } from './controllers/data-query.controller';
 import { DataQueryService } from './services/data-query.service';
 import { BusinessRulesService } from './services/business-rule.service';
@@ -16,6 +17,13 @@ import * as sql from 'mssql';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+    // Fixed cache configuration
+    CacheModule.register({
+      ttl: 300000, // TTL in milliseconds (5 minutes)
+      max: 1000,
+      isGlobal: true,
+      store: 'memory', // Explicitly specify memory store
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -77,7 +85,6 @@ export class AppModule implements OnModuleInit {
 
   private async seedData(): Promise<void> {
     try {
-
       // Seed Financial Data
       const financialData = [
         { ticker: 'AAPL', revenue: 394328000000, profit: 99803000000, assets: 352755000000, liabilities: 302083000000, employees: 164000 },

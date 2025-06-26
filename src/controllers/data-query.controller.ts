@@ -1,17 +1,21 @@
-import { Controller, Get, Query, Post, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Query, Post, Delete, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { DataQueryService } from '../services/data-query.service';
+import { BusinessRulesService } from '../services/business-rule.service';
 import { QueryDataDto } from '../dto/query-data.dto';
 
 @ApiTags('Data Query')
 @Controller('data')
 export class DataQueryController {
-  constructor(private readonly dataQueryService: DataQueryService) {}
+  constructor(
+    private readonly dataQueryService: DataQueryService,
+    private readonly businessRulesService: BusinessRulesService,
+  ) {}
 
   @Get('query')
   @ApiOperation({
     summary: 'Query specific data point for a company with business rules',
-    description: 'Retrieve a specific data point for a company from the specified table with business rule validation and transformation'
+    description: 'Retrieve a specific data point for a company from the specified table with business rule validation and transformation. Results are cached for improved performance.'
   })
   @ApiQuery({
     name: 'ticker',
@@ -63,6 +67,8 @@ export class DataQueryController {
             }
           }
         },
+        cached: { type: 'boolean', example: false },
+        cacheHit: { type: 'boolean', example: false },
         timestamp: { type: 'string', example: '2024-01-15T10:30:00.000Z' }
       }
     }
@@ -115,5 +121,139 @@ export class DataQueryController {
         'penny-stock-detection'
       ]
     };
+  }
+
+  @Get('cache/stats')
+  @ApiOperation({
+    summary: 'Get cache statistics',
+    description: 'Returns information about the current cache configuration and status'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cache statistics retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        cacheEnabled: { type: 'boolean', example: true },
+        defaultTTL: { type: 'number', example: 300 },
+        maxItems: { type: 'number', example: 1000 },
+        message: { type: 'string', example: 'Cache is active and configured' }
+      }
+    }
+  })
+  async getCacheStats() {
+    return await this.dataQueryService.getCacheStats();
+  }
+
+  @Post('cache/warmup')
+  @ApiOperation({
+    summary: 'Warm up the cache',
+    description: 'Pre-populate the cache with commonly requested data points to improve performance'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cache warmup completed successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Cache warmup completed' },
+        warmedEntries: { type: 'number', example: 45 }
+      }
+    }
+  })
+  async warmupCache() {
+    return await this.dataQueryService.warmupCache();
+  }
+
+  @Delete('cache/clear')
+  @ApiOperation({
+    summary: 'Clear cache entries',
+    description: 'Clear specific cache entries or all cache entries'
+  })
+  @ApiQuery({
+    name: 'ticker',
+    description: 'Company ticker symbol (optional - for specific cache clearing)',
+    example: 'AAPL',
+    required: false
+  })
+  @ApiQuery({
+    name: 'dataPoint',
+    description: 'Data point name (optional - for specific cache clearing)',
+    example: 'revenue',
+    required: false
+  })
+  @ApiQuery({
+    name: 'tableName',
+    description: 'Table name (optional - for specific cache clearing)',
+    example: 'financial_data',
+    required: false
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cache cleared successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Cache cleared for AAPL.revenue from financial_data' },
+        clearedKeys: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['query:AAPL:revenue:financial_data']
+        }
+      }
+    }
+  })
+  async clearCache(
+    @Query('ticker') ticker?: string,
+    @Query('dataPoint') dataPoint?: string,
+    @Query('tableName') tableName?: string
+  ) {
+    return await this.dataQueryService.clearCache(ticker, dataPoint, tableName);
+  }
+
+  @Delete('cache/rules/clear')
+  @ApiOperation({
+    summary: 'Clear business rules cache',
+    description: 'Clear cached business rule execution results'
+  })
+  @ApiQuery({
+    name: 'ticker',
+    description: 'Company ticker symbol (optional - for specific rule cache clearing)',
+    example: 'AAPL',
+    required: false
+  })
+  @ApiQuery({
+    name: 'dataPoint',
+    description: 'Data point name (optional - for specific rule cache clearing)',
+    example: 'revenue',
+    required: false
+  })
+  @ApiQuery({
+    name: 'tableName',
+    description: 'Table name (optional - for specific rule cache clearing)',
+    example: 'financial_data',
+    required: false
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Rules cache cleared successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Rule cache cleared for AAPL.revenue from financial_data' },
+        clearedKeys: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['rules:AAPL:revenue:financial_data:no-value', 'rules:AAPL:revenue:financial_data:null']
+        }
+      }
+    }
+  })
+  async clearRulesCache(
+    @Query('ticker') ticker?: string,
+    @Query('dataPoint') dataPoint?: string,
+    @Query('tableName') tableName?: string
+  ) {
+    return await this.businessRulesService.clearRuleCache(ticker, dataPoint, tableName);
   }
 }

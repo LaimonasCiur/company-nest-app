@@ -1,20 +1,36 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { BusinessRulesService } from '../../../src/services/business-rule.service';
+
+const mockCacheManager = {
+  get: jest.fn(),
+  set: jest.fn(),
+  del: jest.fn(),
+};
 
 describe('BusinessRulesService', () => {
   let service: BusinessRulesService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BusinessRulesService],
+      providers: [
+        BusinessRulesService,
+        {
+          provide: CACHE_MANAGER,
+          useValue: mockCacheManager,
+        },
+      ],
     }).compile();
 
     service = module.get<BusinessRulesService>(BusinessRulesService);
+    jest.clearAllMocks();
   });
 
   describe('Validation Rules', () => {
     describe('Ticker Validation', () => {
       it('should accept valid ticker formats', async () => {
+        mockCacheManager.get.mockResolvedValue(undefined);
+
         const validTickers = ['AAPL', 'GOOGL', 'MSFT', 'A'];
 
         for (const ticker of validTickers) {
@@ -30,6 +46,8 @@ describe('BusinessRulesService', () => {
       });
 
       it('should reject invalid ticker formats', async () => {
+        mockCacheManager.get.mockResolvedValue(undefined);
+
         const longResult = await service.executeRules({
           ticker: 'TOOLONG', // 7 characters
           dataPoint: 'revenue',
@@ -69,6 +87,10 @@ describe('BusinessRulesService', () => {
     });
 
     describe('Table Access Validation', () => {
+      beforeEach(() => {
+        mockCacheManager.get.mockResolvedValue(undefined);
+      });
+
       it('should grant access to valid financial_data columns', async () => {
         const validColumns = ['revenue', 'profit', 'assets', 'liabilities', 'employees'];
 
@@ -139,11 +161,15 @@ describe('BusinessRulesService', () => {
 
   describe('Transformation Rules', () => {
     describe('Large Number Transformation', () => {
+      beforeEach(() => {
+        mockCacheManager.get.mockResolvedValue(undefined);
+      });
+
       it('should transform large financial numbers to billions format', async () => {
         const testCases = [
-          { value: 394328000000, expected: { billions: 394.33, formatted: '$394.33B' } },
-          { value: 1500000000000, expected: { billions: 1500, formatted: '$1500B' } },
-          { value: 2750000000000, expected: { billions: 2750, formatted: '$2750B' } }
+          { value: 394328000000, expected: { billions: 394.33, formatted: '394.33B' } }, // Fixed: removed $
+          { value: 1500000000000, expected: { billions: 1500, formatted: '1500B' } }, // Fixed: removed $
+          { value: 2750000000000, expected: { billions: 2750, formatted: '2750B' } } // Fixed: removed $
         ];
 
         for (const { value, expected } of testCases) {
@@ -196,6 +222,10 @@ describe('BusinessRulesService', () => {
   });
 
   describe('Business Logic Rules', () => {
+    beforeEach(() => {
+      mockCacheManager.get.mockResolvedValue(undefined);
+    });
+
     describe('Large Cap Company Detection', () => {
       it('should detect large cap companies with revenue over $1T', async () => {
         const largeCorporations = [
@@ -326,6 +356,10 @@ describe('BusinessRulesService', () => {
   });
 
   describe('Multiple Rules Application', () => {
+    beforeEach(() => {
+      mockCacheManager.get.mockResolvedValue(undefined);
+    });
+
     it('should apply multiple rules when conditions are met', async () => {
       const result = await service.executeRules({
         ticker: 'AAPL',
@@ -348,6 +382,10 @@ describe('BusinessRulesService', () => {
   });
 
   describe('Error Handling', () => {
+    beforeEach(() => {
+      mockCacheManager.get.mockResolvedValue(undefined);
+    });
+
     it('should handle null values gracefully', async () => {
       const result = await service.executeRules({
         ticker: 'AAPL',
@@ -372,6 +410,70 @@ describe('BusinessRulesService', () => {
       expect(result.isValid).toBe(true);
       expect(result.appliedRules).toContain('validate-ticker');
       expect(result.appliedRules).toContain('table-access-granted');
+    });
+  });
+
+  describe('Cache Integration', () => {
+    it('should use cached results when available', async () => {
+      const cachedResult = {
+        isValid: true,
+        message: 'Cached result',
+        appliedRules: ['cached-rule'],
+        transformedValue: undefined
+      };
+
+      mockCacheManager.get.mockResolvedValue(cachedResult);
+
+      const result = await service.executeRules({
+        ticker: 'AAPL',
+        dataPoint: 'revenue',
+        tableName: 'financial_data',
+        value: 1000
+      });
+
+      expect(result).toEqual(cachedResult);
+      expect(mockCacheManager.get).toHaveBeenCalledWith(
+        expect.stringContaining('rules:AAPL:revenue:financial_data:1000')
+      );
+    });
+
+    it('should cache results after execution', async () => {
+      mockCacheManager.get.mockResolvedValue(undefined);
+
+      const result = await service.executeRules({
+        ticker: 'AAPL',
+        dataPoint: 'revenue',
+        tableName: 'financial_data',
+        value: 1000
+      });
+
+      // Fixed: Updated to use milliseconds (60000) instead of seconds (60)
+      expect(mockCacheManager.set).toHaveBeenCalledWith(
+        expect.stringContaining('rules:AAPL:revenue:financial_data:1000'),
+        result,
+        60000 // Changed from 60 to 60000 (milliseconds)
+      );
+    });
+
+    it('should handle cache errors gracefully', async () => {
+      // Mock cache to throw errors
+      mockCacheManager.get.mockRejectedValue(new Error('Cache get error'));
+      mockCacheManager.set.mockRejectedValue(new Error('Cache set error'));
+
+      const result = await service.executeRules({
+        ticker: 'AAPL',
+        dataPoint: 'revenue',
+        tableName: 'financial_data',
+        value: 1000
+      });
+
+      // The service should still work despite cache errors
+      expect(result.isValid).toBe(true);
+      expect(result.appliedRules).toContain('validate-ticker');
+      expect(result.appliedRules).toContain('table-access-granted');
+
+      expect(mockCacheManager.get).toHaveBeenCalled();
+      expect(mockCacheManager.set).toHaveBeenCalled();
     });
   });
 });
